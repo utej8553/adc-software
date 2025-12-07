@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Signal Simulations — Code Viewer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!--
+    This page starts fully blank. Press "a" (or "A") to show the code viewer.
+    Press "Escape" to hide it again.
+  -->
+
+  <div id="app" class="hidden">
+    <div class="container">
+      <header>
+        <div>
+          <h1>Signal Simulations — Code Viewer</h1>
+          <p>MATLAB scripts: ADC (AGC), BER comparisons, 8-PSK, QPSK. Click a section to expand, then copy if needed.</p>
+        </div>
+      </header>
+
+      <div class="card">
+        <details open>
+          <summary>
+            <div class="title">
+              <strong>adc code (AGC)</strong>
+              <span class="badge">MATLAB</span>
+            </div>
+            <div class="controls">
+              <button class="copy-btn" data-target="adc">Copy</button>
+            </div>
+          </summary>
+
+          <div class="code-wrap">
+            <div class="code-ol" data-id="adc">
+              <ol aria-hidden="true"></ol>
+              <pre class="code-block" data-lang="matlab" id="adc">
+clc;
+clear all;
+close all;
+
+Fs = 1000;
+t = 0:1/Fs:5;
+carrier_freq = 50;
+
+envelope = 1 + 0.5*sin(2*pi*0.5*t);
+
+input_signal = envelope .*(2 ...
+    *sin(2*pi*carrier_freq*t));
+
+V_ref = 0.5;
+gain = 1;
+output_signal = zeros(size(input_signal));
+
+for n = 1:length(input_signal)
+    envelope_est = abs(input_signal(n));
+    if envelope_est < 1e-6
+        gain_update = 1;
+    else
+        gain_update = V_ref / envelope_est;
+    end
+    gain = 0.99 * gain + 0.01 * gain_update;
+    output_signal(n) = gain * input_signal(n);
+end
+
+figure;
+subplot(2,1,1);
+plot(t, input_signal);
+title('Input Signal with Dynamic Amplitude');
+xlabel('Time (s)');
+ylabel('Amplitude');
+grid on;
+
+subplot(2,1,2);
+plot(t, output_signal);
+title('Output Signal with AGC');
+xlabel('Time (s)');
+ylabel('Amplitude');
+grid on;
+              </pre>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card">
+        <details>
+          <summary>
+            <div class="title">
+              <strong>Symbol rate / bit error rate — WAM mod in AWGN</strong>
+              <span class="badge">MATLAB</span>
+            </div>
+            <div class="controls">
+              <button class="copy-btn" data-target="ber">Copy</button>
+            </div>
+          </summary>
+
+          <div class="code-wrap">
+            <div class="code-ol" data-id="ber">
+              <ol aria-hidden="true"></ol>
+              <pre class="code-block" data-lang="matlab" id="ber">
+N = 1e5;
+SNR_dB = 0:2:20;
+M_QPSK = 4;
+M_QAM = 16;
+
+data_QPSK = randi([0 M_QPSK-1], N/2, 1);
+data_QAM = randi([0 M_QAM-1], N/log2(M_QAM), 1);
+
+tx_QPSK = pskmod(data_QPSK, M_QPSK, pi/4);
+tx_QAM = qammod(data_QAM, M_QAM, 'UnitAveragePower', true);
+
+ber_QPSK = zeros(size(SNR_dB));
+ser_QPSK = zeros(size(SNR_dB));
+ber_QAM = zeros(size(SNR_dB));
+ser_QAM = zeros(size(SNR_dB));
+
+for i = 1:length(SNR_dB)
+    rx_QPSK = awgn(tx_QPSK, SNR_dB(i), 'measured');
+    rx_QAM = awgn(tx_QAM, SNR_dB(i), 'measured');
+    datahat_QPSK = pskdemod(rx_QPSK, M_QPSK, pi/4);
+    datahat_QAM = qamdemod(rx_QAM, M_QAM, 'UnitAveragePower', true);
+    [numerrQPSK, ser_QPSK(i)] = symerr(data_QPSK, datahat_QPSK);
+    [numerrQAM, ser_QAM(i)] = symerr(data_QAM, datahat_QAM);
+    ber_QPSK(i) = ser_QPSK(i) / log2(M_QPSK);
+    ber_QAM(i) = ser_QAM(i) / log2(M_QAM);
+end
+
+figure;
+semilogy(SNR_dB, ber_QPSK, 'o-', 'LineWidth', 1.5); hold on;
+semilogy(SNR_dB, ber_QAM, 's-', 'LineWidth', 1.5);
+grid on;
+xlabel('SNR (dB)'); ylabel('Bit Error Rate (BER)');
+title('BER Comparison of QPSK and 16-QAM in AWGN Channel');
+legend('QPSK', '16-QAM', 'Location', 'southwest');
+
+figure;
+semilogy(SNR_dB, ser_QPSK, 'o-', 'LineWidth', 1.5); hold on;
+semilogy(SNR_dB, ser_QAM, 's-', 'LineWidth', 1.5);
+grid on;
+xlabel('SNR (dB)'); ylabel('Symbol Error Rate (SER)');
+title('SER Comparison of QPSK and 16-QAM in AWGN Channel');
+legend('QPSK', '16-QAM');
+
+scatterplot(tx_QPSK); title('QPSK Constellation');
+scatterplot(tx_QAM); title('16-QAM Constellation');
+              </pre>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card">
+        <details>
+          <summary>
+            <div class="title">
+              <strong>End-to-end simulation of 8-PSK</strong>
+              <span class="badge">MATLAB</span>
+            </div>
+            <div class="controls">
+              <button class="copy-btn" data-target="psk8">Copy</button>
+            </div>
+          </summary>
+
+          <div class="code-wrap">
+            <div class="code-ol" data-id="psk8">
+              <ol aria-hidden="true"></ol>
+              <pre class="code-block" data-lang="matlab" id="psk8">
+clc; clear; close all;
+M = 8;
+k = log2(M);
+Nsym = 5e4;
+sps = 8;
+rolloff = 0.35;
+span = 10;
+rrc = rcosdesign(rolloff, span, sps, 'sqrt');
+SNRdB = 8;
+
+txSymbols = randi([0 M-1], Nsym, 1);
+txSymbols_mod = pskmod(txSymbols, M, 0, 'gray');
+txUp = upfirdn(txSymbols_mod, rrc, sps, 1);
+txUp = txUp / sqrt(mean(abs(txUp).^2));
+
+rxChan = awgn(txUp, SNRdB, 'measured');
+
+rxFilt = upfirdn(rxChan, rrc, 1, 1);
+
+totalDelay = span * sps;
+
+if length(rxFilt) <= 2*totalDelay
+    error('rxFilt too short after filtering — increase Nsym or reduce span/sps.');
+end
+
+rxFiltTrim = rxFilt(totalDelay+1 : end-totalDelay);
+
+rxDown = rxFiltTrim(1:sps:end);
+
+nRx = length(rxDown);
+nTx = length(txSymbols_mod);
+nUse = min(nRx, nTx);
+
+rxSym_forCompare = rxDown(1:nUse);
+txSym_forCompare = txSymbols_mod(1:nUse);
+txIdx_forCompare  = txSymbols(1:nUse);
+
+rxIdx = pskdemod(rxSym_forCompare, M, 0, 'gray');
+
+txBits_mat = de2bi(txIdx_forCompare, k, 'left-msb');
+rxBits_mat = de2bi(rxIdx, k, 'left-msb');
+
+txBits = reshape(txBits_mat.', [], 1);
+rxBits = reshape(rxBits_mat.', [], 1);
+
+nBits = min(length(txBits), length(rxBits));
+txBits = txBits(1:nBits);
+rxBits = rxBits(1:nBits);
+
+[numErr, berRate] = biterr(txBits, rxBits);
+BER = numErr / nBits;
+
+fprintf('Symbols used for comparison: %d (of %d transmitted)\n', nUse, Nsym);
+fprintf('Bits compared: %d. Bit errors = %d. BER = %.5e (biterr rate = %.5e)\n', nBits, numErr, BER, berRate);
+
+scatterplot(txSym_forCompare);
+title('Transmitted symbols');
+scatterplot(rxSym_forCompare);
+title('Received symbols');
+              </pre>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card">
+        <details>
+          <summary>
+            <div class="title">
+              <strong>QPSK Modulation Scheme & Performance</strong>
+              <span class="badge">MATLAB</span>
+            </div>
+            <div class="controls">
+              <button class="copy-btn" data-target="qpsk">Copy</button>
+            </div>
+          </summary>
+
+          <div class="code-wrap">
+            <div class="code-ol" data-id="qpsk">
+              <ol aria-hidden="true"></ol>
+              <pre class="code-block" data-lang="matlab" id="qpsk">
+clc; clear; close all;
+M = 4;
+k = log2(M);
+N = 1e5;
+EbN0dB = 0:2:14;
+sps = 8;
+rolloff = 0.35;
+span = 10;
+rrc = rcosdesign(rolloff, span, sps, 'sqrt');
+
+data_bits = randi([0 1], N, 1);
+data_sym = bi2de(reshape(data_bits, k, []).', 'left-msb');
+txSym = pskmod(data_sym, M, pi/4, 'gray');
+
+txSig = upfirdn(txSym, rrc, sps, 1);
+
+txSig = txSig / sqrt(mean(abs(txSig).^2));
+
+phaseOffset = 15 * pi/180;
+freqOffset = 100;
+timingOffset = 3;
+fs = 1e6;
+fadingChannel = false;
+
+BER_sim = zeros(size(EbN0dB));
+BER_theory = 0.5*erfc(sqrt(10.^(EbN0dB/10)));
+
+for i = 1:length(EbN0dB)
+    rxSig = awgn(txSig, EbN0dB(i) + 10*log10(k), 'measured');
+    rxSig = rxSig .* exp(1j*phaseOffset);
+    n = (0:length(rxSig)-1).';
+    rxSig = rxSig .* exp(1j*2*pi*freqOffset*n/fs);
+    rxSig = [zeros(timingOffset,1); rxSig(1:end-timingOffset)];
+    if fadingChannel
+        h = [0.9 0.3 0.1];
+        rxSig = conv(rxSig, h, 'same');
+    end
+    rxFilt = upfirdn(rxSig, rrc, 1, 1);
+    rxFilt = rxFilt(span*sps+1:end-span*sps);
+    rxDown = rxFilt(1:sps:end);
+    rxDown = rxDown .* exp(-1j*phaseOffset);
+    rxSym = pskdemod(rxDown, M, pi/4, 'gray');
+    rx_bits = reshape(de2bi(rxSym, k, 'left-msb').', [], 1);
+    tx_bits = reshape(de2bi(data_sym, k, 'left-msb').', [], 1);
+    nBits = min(length(rx_bits), length(tx_bits));
+    BER_sim(i) = sum(rx_bits(1:nBits) ~= tx_bits(1:nBits)) / nBits;
+end
+
+figure;
+semilogy(EbN0dB, BER_sim, 'ro-', 'LineWidth', 1.5); hold on;
+semilogy(EbN0dB, BER_theory, 'b--', 'LineWidth', 1.5);
+grid on;
+xlabel('E_b/N_0 (dB)');
+ylabel('Bit Error Rate (BER)');
+title('QPSK Performance under Channel Impairments');
+legend('Simulated BER (with impairments)', 'Theoretical AWGN BER')
+
+scatterplot(txSym);
+title('Transmitted QPSK Constellation');
+scatterplot(rxDown(1:5000));
+title(sprintf('Received Constellation (SNR = %d dB, with impairments)', EbN0dB(end)));
+              </pre>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <footer>
+        Tip: press "a" to hide/show. You can also use Shift+E to toggle all details.
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    // initial setup: hidden app until 'a' pressed
+    const app = document.getElementById('app');
+
+    // Render line numbers for each code block
+    function renderLineNumbers() {
+      document.querySelectorAll('.code-ol').forEach(container=>{
+        const pre = container.querySelector('pre.code-block');
+        const ol = container.querySelector('ol');
+        const lines = pre.innerText.replace(/\t/g,'    ').split(/\r?\n/);
+        ol.innerHTML = '';
+        for(let i=0;i<lines.length;i++){
+          const li = document.createElement('li');
+          li.textContent = i+1;
+          ol.appendChild(li);
+        }
+      });
+    }
+
+    // copy buttons
+    function setupCopyButtons(){
+      document.querySelectorAll('button.copy-btn').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          const targetId = btn.dataset.target;
+          const pre = document.getElementById(targetId);
+          if(!pre) return;
+          const text = pre.innerText;
+          try{
+            await navigator.clipboard.writeText(text);
+            const old = btn.textContent;
+            btn.textContent = 'Copied ✓';
+            setTimeout(()=> btn.textContent = old, 1400);
+          }catch(e){
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); btn.textContent = 'Copied ✓'; }
+            catch(e2){ alert('Copy failed — select and copy manually.'); }
+            ta.remove();
+            setTimeout(()=> btn.textContent = 'Copy', 1400);
+          }
+        });
+      });
+    }
+
+    // toggle details shortcut Shift+E
+    function setupShortcuts() {
+      document.addEventListener('keydown', (e)=>{
+        if(e.key === 'E' && e.shiftKey){
+          document.querySelectorAll('details').forEach(d => d.open = !d.open);
+        }
+      });
+    }
+
+    // show/hide app on 'a' / Escape
+    document.addEventListener('keydown', (e)=>{
+      if(e.key === 'a' || e.key === 'A'){
+        if(app.classList.contains('hidden')){
+          app.classList.remove('hidden');
+          // render only when shown (keeps initial page minimal)
+          renderLineNumbers();
+          setupCopyButtons();
+          setupShortcuts();
+          // focus first copy button for accessibility
+          const firstBtn = document.querySelector('button.copy-btn');
+          if(firstBtn) firstBtn.focus({preventScroll:true});
+        }
+      } else if(e.key === 'Escape'){
+        if(!app.classList.contains('hidden')){
+          app.classList.add('hidden');
+        }
+      }
+    });
+
+    // in case user uses mouse to reveal (not requested but harmless) — optional:
+    // double-click on blank area to reveal (keeps primary flow keyboard-first)
+    document.addEventListener('dblclick', (ev)=>{
+      if(app.classList.contains('hidden')){
+        app.classList.remove('hidden');
+        renderLineNumbers();
+        setupCopyButtons();
+        setupShortcuts();
+      }
+    });
+  </script>
+</body>
+</html>
